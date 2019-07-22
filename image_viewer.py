@@ -1,25 +1,24 @@
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
-from PyQt5.QtWidgets import QWidget, QApplication,QPushButton,QProgressDialog,QHBoxLayout, QLineEdit, QVBoxLayout, QLabel,QScrollArea
+from PyQt5.QtWidgets import QWidget, QApplication, QPushButton, QHBoxLayout, QLineEdit, QVBoxLayout, QLabel, QScrollArea
 import sys
 import math
-from PIL import Image
 import qtawesome as qta
 
 
 class ImageWidget(QWidget):
     mySignal = pyqtSignal()
-    def __init__(self,parent=None):
+
+    def __init__(self, parent=None):
         super(ImageWidget, self).__init__(parent)
-        self.resize(400,300)
+        self.resize(400, 300)
         self.setWindowTitle("Image Viewer")
         self.setWindowIcon(qta.icon('fa5.eye', color='gray'))
-        self.x0=10
-        self.y0=20
-        self.w=30
-        self.h=40
-
+        self.x0 = 10
+        self.y0 = 20
+        self.w = 30
+        self.h = 40
 
         pushbutton0 = QPushButton("Open Img")
         pushbutton1 = QPushButton("Zoom In")
@@ -30,7 +29,7 @@ class ImageWidget(QWidget):
         pushbutton1.setMaximumSize(80, 50)
         pct_lineedit.setMaximumSize(80, 50)
         pushbutton2.setMaximumSize(80, 50)
-        ## 左侧栏布局
+        # 左侧栏布局
         vlayout_52_left = QVBoxLayout()
         vlayout_52_left.addSpacing(10)
         vlayout_52_left.addWidget(pushbutton0)
@@ -106,7 +105,6 @@ class ImageWidget(QWidget):
         edit3.setText(str(abs(int(label.w / label.ratio))))  # 绝对值,比例
         edit4.setText(str(abs(int(label.h / label.ratio))))
 
-
     def selection_functon(self, label, edit1, edit2, edit3, edit4, flag):
         # painEvent不能传递参数，因此通过改变label属性来传递参数
         # 四个参数分别为：选区左上角的(x,y)以及选区的宽和高度
@@ -144,13 +142,12 @@ class ImageWidget(QWidget):
                 edit2.setText('0')
                 edit3.setText('0')
                 edit4.setText('0')
-            label.repaint() # 更新窗口，以使得新的paintevent触发
+            label.repaint()  # 更新窗口，以使得新的paintevent触发
         except:
             pass
 
     def transmit_selection(self):
-        return self.x0,self.y0,self.w,self.h
-
+        return self.x0, self.y0, self.w, self.h
 
     def open_img(self, label, button, scroll_area, lineedit):
         filename = QFileDialog.getOpenFileName(self, "Open file", '',
@@ -181,7 +178,6 @@ class ImageWidget(QWidget):
         label.setScaledContents(True)
 
         button.click()  # 新打开一张图片时调用cancel_bt将label上的矩形框清除
-
 
     def zoom_in(self, label, button, scroll_area, lineedit):  # 放大
         print("zoom in + clicked")
@@ -234,6 +230,7 @@ class ImageWidget(QWidget):
 
 class MyLabel(QLabel):
     mySignal1 = pyqtSignal()
+
     def __init__(self):
         super(MyLabel, self).__init__()
         self.x0 = 0 # 要划矩形框的参数
@@ -241,34 +238,38 @@ class MyLabel(QLabel):
         self.w = 0
         self.h = 0
 
-        self.press_flag=False #判断在label上的鼠标按下后是否抬起，按下置为True，抬起置为False
+        self.press_flag=False # 判断在label上的鼠标按下后是否抬起，按下置为True，抬起置为False
 
-        self.ratio=1 #label相对于图像原始尺寸的缩放比例
+        self.ratio=1 # label相对于图像原始尺寸的缩放比例
         # 自定义Label，额外添加四个属性，分别为要设置选区的左上角(x0,y0)和选区宽、高
 
         self.mouse_position=(0,0) # 用来指示当前鼠标（右键）点击的地方相对label的位置
+
     def paintEvent(self, event):
         super(MyLabel,self).paintEvent(event)
         painter=QPainter(self)
         # painter.begin(self)
         painter.setPen(QPen(Qt.yellow,2,Qt.DashLine))
-        print('--paintevent function triggered--')
-        print(QRect(self.x0,self.y0,self.w,self.h))
+        # print('--paintevent function triggered--')
+        # print(QRect(self.x0,self.y0,self.w,self.h))
         painter.drawRect(QRect(self.x0,self.y0,self.w,self.h))
         # paintEvent似乎不允许传递自定义参数？因此通过调用MyLabel属性来实现参数传递
+
     def mousePressEvent(self, event):
         # print(self.pos()) # label左上角的位置
-        self.press_flag=True
+        self.press_flag = True
         x=event.x()
         y=event.y()
-        # if event.button()==Qt.RightButton: #右键点击显示当前鼠标相对于label的位置
+        # if event.button() == Qt.RightButton: #右键点击显示当前鼠标相对于label的位置
         self.x0=x
         self.y0=y
         self.mouse_position=(round(x/self.ratio),round(y/self.ratio))
         print("鼠标在图像中的实际位置：",self.mouse_position)
+
     def mouseReleaseEvent(self, event):
-        self.press_flag=False #抬起则置为false
-    def mouseMoveEvent(self, event): #限制鼠标在label内，超出无效
+        self.press_flag=False  # 抬起则置为false
+
+    def mouseMoveEvent(self, event):   # 限制鼠标在label内，超出无效
         if self.press_flag:
             x = event.x()
             y = event.y()
@@ -292,36 +293,30 @@ class myWidgetScrollArea(QScrollArea):
         self.scrollBarY = self.verticalScrollBar()
 
     def eventFilter(self, QObject, QEvent):
-
-        if QEvent.type() == QEvent.MouseMove and QEvent.button()==Qt.RightButton:
-            #后半句有些问题，去掉后半句，则可用鼠标拖动滚动区域
+        if QEvent.type() == QEvent.MouseMove and QEvent.button() == Qt.RightButton:
+            # 后半句有些问题，去掉后半句，则可用鼠标拖动滚动区域
             if self.last_time_move_x == 0:
                 self.last_time_move_x = QEvent.pos().x()
-
             if self.last_time_move_y == 0:
                 self.last_time_move_y = QEvent.pos().y()
-
             distance_x = self.last_time_move_x - QEvent.pos().x()
             distance_y = self.last_time_move_y - QEvent.pos().y()
-
             # print(self.last_time_move_y, QEvent.pos().y(), distance_y, self.scrollBarY.value())
             self.scrollBarX.setValue(self.scrollBarX.value() + distance_x)
             self.scrollBarY.setValue(self.scrollBarY.value() + distance_y)
-
         elif QEvent.type() == QEvent.MouseButtonRelease:
             self.last_time_move_x = self.last_time_move_y = 0
-
         return QWidget.eventFilter(self, QObject, QEvent)
 
     def mousePressEvent(self, event):
         # print(self.pos()) # l滚动区域左上角的位置
-        print("鼠标相对于滚动区域的位置:",event.pos()) # 鼠标相对于滚动区域的位置
-        # if event.button()==Qt.LeftButton:
+        print("鼠标相对于滚动区域的位置:", event.pos()) # 鼠标相对于滚动区域的位置
+        # if event.button() == Qt.LeftButton:
         #     print('11')
 
 
 if __name__=='__main__':
     app = QApplication(sys.argv)
-    mywidget=ImageWidget()
-    mywidget.show()
+    my_widget = ImageWidget()
+    my_widget.show()
     sys.exit(app.exec_())

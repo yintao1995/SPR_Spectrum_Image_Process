@@ -1,149 +1,160 @@
 # _*_ coding:utf-8 _*_
+"""
+Read SPR spectrum data and seek it's resonance wavelength.
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 
-def read_data(path, sep, fn=''): # path为文件路径, fn为无后缀的文件名, sep为分隔符 #目前仅支持jdx和txt文件
-    if(fn):
-        filename = path+'/'+fn
+
+def read_data(file_path, sep, fn=''):
+    """
+    Read spectrum data from spectrum file(support .jdx or .txt ).
+
+    :param file_path:    str, absolute or relative file path
+    :param sep:     str, separator, ',' for .jdx file, and ' ' for .txt file.
+    :param fn:
+    :return:
+    """
+    if fn:
+        filename = file_path + '/' + fn
     else:
-        filename = path
-    data = {}
-    with open(filename, 'r',encoding='UTF-8') as file_obj:
+        filename = file_path
+    x_data = []
+    y_data = []
+    with open(filename, 'r', encoding='UTF-8') as file_obj:
         for line in file_obj.readlines():
-            #print(line)
-            temp = line.strip().split(sep)  # 每行按Tab分割成两部分
+            temp = line.strip().split(sep)
             try:
-                x_data = float( temp[0].strip() )
-                y_data = float( temp[1].strip() )
-                data[x_data] = y_data  # 按键值对存入字典
-            except:
+                x_data.append(float(temp[0].strip()))
+                y_data.append(float(temp[1].strip()))
+            except ValueError:
                 pass
-    return data
+    return x_data, y_data
 
 
-def visual_data(a,section=None):
+def visual_data(spectrum_data, section=None):
+    """
+    Calculate the resonance wavelength of given data (x[], y[]),
+    Accept 'section' parameter to manually correct errors.
 
-                                                            # 参数a是一个字典,其中的键是x轴,值是y轴
-                                                            # 参数section是人工校准区域,输入(a,b)则截取这一片段进行拟合求得极小值
-    #采样
-    N=5
-    x_data = list(a.keys())
-    x1=[x_data[i] for i in range(0,len(x_data),N)]
-    y_data = list(a.values())
-    y1 = [y_data[i] for i in range(0, len(y_data), N)]
+    :param spectrum_data:  Tuple -- (x[], y[])
+    :param section:  Tuple -- (r1, r2)
+    :return:
+    """
+    # sampling
+    sampling_rate = 5
+    x_data = spectrum_data[0]
+    x1 = [x_data[i] for i in range(0, len(x_data), sampling_rate)]
+    y_data = spectrum_data[1]
+    y1 = [y_data[i] for i in range(0, len(y_data), sampling_rate)]
 
-    # plt.plot(x1,y1)
-    # plt.scatter(x1,y1,s=5)
-    #归一化
+    # normalize
     y_max = max(y1)
-    n_y1 = [ai/y_max for ai in y1] #采样+归一
-    # fig1=plt.figure("Spectrum")
-    # plt.plot(x1, n_y1)
-    ymax=max(y_data)
-    n_y=[ai/ymax for ai in y_data] #不采样+归一
+    n_y1 = [ai/y_max for ai in y1]
+    ymax = max(y_data)
+    n_y = [ai/ymax for ai in y_data]
 
+    # smooth
     smooth_order = 6
     for i in range(smooth_order):
         n_y1 = mean_smooth(n_y1)
 
-
+    # Firstly, find a rough estimate of resonance wavelength(relative minimum value).
+    # Secondly, if a rough estimate is found, take a section around it out for fitting.
     if not section:
-        #基础算法寻找极小值
-
-        temp = find_min(n_y1,N)
-        print('temp:',temp)
+        temp = find_min(n_y1, sampling_rate)
+        # print('temp:',temp)
         if not temp:
-            return x_data,n_y,0
-        # print(x1[temp[0]],temp[1])  #共振波长x1[temp[0]]
-        # print("rough estimation:",x1[temp[0]])
-        # plt.axvline(x1[temp[0]],c='blue',alpha=0.3)
+            return x_data, n_y, 0
 
-        #截取在“最小值”左右各20nm的步长区域
-        length=30 # 20
-        #index=cut_list(x1,580,630)
+        length = 20
         index = cut_list(x1, x1[temp[0]]-length, x1[temp[0]]+length)
-        cut_x=x_data[N*index[0]:N*index[1]]
-        cut_y=n_y[N*index[0]:N*index[1]]
-        # plt.plot(cut_x,cut_y)
-    else: #否则人工指定截取、拟合区域
-        index=cut_list(x_data,section[0],section[1])
-        cut_x=x_data[index[0]:index[1]]
-        cut_y=n_y[index[0]:index[1]]
-        # plt.plot(cut_x,cut_y)
+        cut_x = x_data[sampling_rate*index[0]: sampling_rate*index[1]]
+        cut_y = n_y[sampling_rate*index[0]: sampling_rate*index[1]]
+    else:
+        index = cut_list(x_data, section[0], section[1])
+        cut_x = x_data[index[0]:index[1]]
+        cut_y = n_y[index[0]:index[1]]
 
-    #对截取的区域进行多项式拟合
-    cut_x=np.array(cut_x)
-    cut_y=np.array(cut_y)
-    z1=np.polyfit(cut_x,cut_y,4)  #z1为拟合后的系数
-    p1=np.poly1d(z1)
-    print(p1)  # p1为拟合的多项式
-    fitted_y=p1(cut_x)
-    # plt.plot(cut_x,fitted_y,c='red')
+    # fitting
+    cut_x = np.array(cut_x)
+    cut_y = np.array(cut_y)
+    z1 = np.polyfit(cut_x, cut_y, 4)
+    p1 = np.poly1d(z1)
+    # print(p1)
+    fitted_y = p1(cut_x)
 
-    #对拟合后的多项式直接寻找最小值即可
-    min_y=min(fitted_y)
-
-    for i in range(0,len(cut_x)):
-        if fitted_y[i]==min_y:
-            resonance_wavelength=cut_x[i]
-            resonance_amptitude =cut_y[i]
+    # find minimum
+    min_y = min(fitted_y)
+    resonance_wavelength = 0
+    resonance_amplitude = 0
+    for i in range(0, len(cut_x)):
+        if fitted_y[i] == min_y:
+            resonance_wavelength = cut_x[i]
+            resonance_amplitude = cut_y[i]
             break
-    return x_data,n_y,resonance_wavelength,resonance_amptitude
-            # print("fitted resonance wavelength :",resonance_wavelength)
-            # plt.axvline(resonance_wavelength, c='red', alpha=0.5)
+    return x_data, n_y, resonance_wavelength, resonance_amplitude
 
-    # plt.text(500 , 0.2, "resonance wavelength="+str(resonance_wavelength)+"nm")
-    # plt.show()
 
-def cut_list(list,a1,a2): #将列表L从x轴a1-a2截取出来,其中L中的数字是单增的
-    for i in range(len(list)):# 从前往后
-        if list[i]<a1:
+def cut_list(list_a, x1, x2):
+    """
+    Give an increasing sequence, find the chosen section which satisfy: x1<x<x2.
+
+    :param list_a:   List[num]
+    :param x1:       num
+    :param x2:       num
+    :return:    Tuple, index at start and end
+    """
+    index1 = index2 = 0
+    for i in range(len(list_a)):
+        if list_a[i] < x1:
             pass
         else:
-            i1=i
+            index1 = i
             break
-    if list[-1] < a2:  # 如果范围超出了数据。直接返回最后一个
-        return i1,-1
-    for i in range(i1,len(list)):
-        if list[i]<a2:
+    if list_a[-1] < x2:
+        return index1, -1
+    for i in range(index1, len(list_a)):
+        if list_a[i] < x2:
             pass
         else:
-            i2=i
+            index2 = i
             break
-    return i1,i2 #返回index
+    return index1, index2
 
-def mean_smooth(a): # 均值平滑
-    temp = a
-    for i in range(1, len(a) - 1):
-        temp[i] = (a[i - 1] + a[i + 1]) / 2
+
+def mean_smooth(data_y):
+    """Median Filter
+    Smooth the data before next step of processing to reduce errors
+    :param data_y:  List[num]
+    :return:               List[num]
+    """
+    temp = data_y
+    for i in range(1, len(data_y) - 1):
+        temp[i] = (data_y[i - 1] + data_y[i + 1]) / 2
     return temp
 
-def find_min(a,N): # 求一串数字列表的极小值
-    # plt.plot(a)
-    # print(len(a))
-    # print(500/N,len(a)-750/N)
-    # print(a[int(len(a)-750/N)])
-    for i in range(round(500/N), len(a)-round(250/N)):
-        print(a[i])
-        if a[i-1] < a[i] or a[i+1] < a[i]:
+
+def find_min(list_a, sampling):
+    """
+    rough estimate of relative minimum value
+    """
+    for i in range(round(500 / sampling), len(list_a) - round(250 / sampling)):
+        if list_a[i - 1] < list_a[i] or list_a[i + 1] < list_a[i]:
             pass
-
-        # elif a[i-1] > a[i] and a[i+1] > a[i]:  # bug：相等
         else:
-            if a[i-round(50/N)] > a[i] and a[i+round(50/N)] > a[i]:
-                print( a[i-round(50/N)] ,a[i+round(50/N)] )
-            #i是极小值处于列表中的第i个数,a[i]是对应的y值
-                return i,a[i]
+            if list_a[i - round(50 / sampling)] > list_a[i] and list_a[i + round(50 / sampling)] > list_a[i]:
+                return i, list_a[i]
 
-if __name__=="__main__":
-    path="C:/Users/yintao/PycharmProjects/SPR_System/Test_Data/test1.txt"
-    data=visual_data(read_data(path,'\t'))
-    #
-    fig=plt.figure(figsize=(10,5),dpi=100)
-    plt.plot(data[0],data[1])
-    plt.axvline(data[2],c='red',alpha=0.5)
+
+if __name__ == "__main__":
+    path = "D:\\学习！学习！学习！学习！\\电子所里的研二\\实验数据\\20181116_LX_TiO2\\data\\10_00.txt"
+    data = visual_data(read_data(path, '\t'))
+    fig = plt.figure(figsize=(10, 5), dpi=100)
+    plt.plot(data[0], data[1])
+    plt.axvline(data[2], c='red', alpha=0.5)
     # plt.text(500 , 0.2, "resonance wavelength="+str(data[2])+"nm")
-    plt.text(500 , 0.2, "resonance wavelength="+str(data[2])+"nm")
-    # label=['-12°']
+    plt.text(500, 0.2, "resonance wavelength="+str(data[2])+"nm")
+    # label = ['-12°']
     # plt.legend(label)
     plt.show()
